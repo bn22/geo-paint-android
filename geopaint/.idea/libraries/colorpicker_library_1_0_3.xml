@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="colorpicker-library-1.0.3">
+    <CLASSES>
+      <root url="file://$PROJECT_DIR$/app/build/intermediates/exploded-aar/petrov.kristiyan.colorpicker/colorpicker-library/1.0.3/res" />
+      <root url="jar://$PROJECT_DIR$/app/build/intermediates/exploded-aar/petrov.kristiyan.colorpicker/colorpicker-library/1.0.3/jars/classes.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES>
+      <root url="jar://$USER_HOME$/.gradle/caches/modules-2/files-2.1/petrov.kristiyan.colorpicker/colorpicker-library/1.0.3/2d0d56c5716ce96eb1e30e7ef4dde144aa410599/colorpicker-library-1.0.3-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
