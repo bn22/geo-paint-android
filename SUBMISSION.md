@@ -3,7 +3,7 @@
 The below questions should be answered regarding your submission!
 
 ##### What kind of drawing(s) did you make? #####
-> Answer goes here!
+A random flag
 
 ##### What model device did you test your application on? What SDK did you target? #####
 The device is a Lenovo Tab 2 a10. The SDK that I targeted was Android 4.0.3 IceCreamSandwich target version 23
