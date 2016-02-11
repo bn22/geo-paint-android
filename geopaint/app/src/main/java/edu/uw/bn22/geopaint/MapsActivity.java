@@ -2,10 +2,12 @@ package edu.uw.bn22.geopaint;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.net.Uri;
 import android.os.Environment;
+import android.preference.PreferenceManager;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
@@ -53,6 +55,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     private int count = 0;
     private Boolean pen = true;
     private String selectedColor = "";
+    private int selectColor = -16777216;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,6 +71,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     .build();
         }
 
+        //Remembers the user's setting
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        pen = prefs.getBoolean("penDown", true);
+        selectColor = prefs.getInt("color", 0);
+        
         // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -94,13 +102,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResult) {
-        /*if (requestCode == REQUEST_CODE_ASK_PERMISSIONS) {
-            if (grantResult.length > 0 && grantResult[0] == PackageManager.PERMISSION_GRANTED) {
-                onConnected(null); //should work :/
-            }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResult);
-        }*/
+        ///if the use doesn't allow access to location (GPS)
         switch(requestCode){
             case REQUEST_CODE_ASK_PERMISSIONS: { //if asked for location
                 if(grantResult.length > 0 && grantResult[0] == PERMISSION_GRANTED){
@@ -114,18 +116,38 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onConnected(Bundle bundle) {
+        //Checks for permission to access the location (GPS)
         LocationRequest request = new LocationRequest();
         request.setInterval(10000);
         request.setFastestInterval(5000);
         request.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
 
         int permission = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION);
-        if(permission == PERMISSION_GRANTED){
-            //yay! Have permission, do the thing
+        if (permission == PERMISSION_GRANTED){
             LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, request, this);
+
+            //Creates the inital marker indicating the user's current point
+            try {
+                Log.v(TAG, "Got location");
+                Location loc = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+                if(loc != null) {
+                    Log.v(TAG, "Not Null");
+                    LatLng startPoint = new LatLng(loc.getLatitude(), loc.getLongitude());
+                    mMap.addMarker(new MarkerOptions().position(startPoint).title("Starting Point"));
+                    mMap.moveCamera(CameraUpdateFactory.newLatLng(startPoint));
+                    if (pen) {
+                        lineList = line.getPoints();
+                        line = line.add(startPoint);
+                        Polyline path = mMap.addPolyline(line);
+                        lineSave.add(path);
+                        path.setPoints(lineList);
+                    }
+                }
+            } catch (SecurityException e) {
+                Log.v(TAG, "Security Exception");
+            }
         }
-        else{
-            //if(ActivityCompat.shouldShowRequestPermissionRationale(...))
+        else {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.ACCESS_FINE_LOCATION},
                     REQUEST_CODE_ASK_PERMISSIONS);
@@ -133,18 +155,20 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     public void drawLine(Location current) {
+        //Draws a line whenever a new location is passed
         if (current != null) {
             LatLng newPoint = new LatLng(current.getLatitude(), current.getLongitude());
-            count = count + 1;
-            mMap.addMarker(new MarkerOptions().position(newPoint).title("Marker " + count));
-            mMap.moveCamera(CameraUpdateFactory.newLatLng(newPoint));
             if (pen) {
                 lineList = line.getPoints();
-                line.add(newPoint);
+                line = line.add(newPoint);
                 Polyline path = mMap.addPolyline(line);
                 lineSave.add(path);
                 path.setPoints(lineList);
+            } else {
+                mMap.addMarker(new MarkerOptions().position(newPoint).title("Marker " + count));
+                count = count + 1;
             }
+            mMap.moveCamera(CameraUpdateFactory.newLatLng(newPoint));
         }
     }
 
@@ -177,7 +201,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         super.onStop();
     }
 
-
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         //Creates the Option menu
@@ -188,9 +211,15 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        //Listens for clicks on the options menu
+        int optionClickedId = item.getItemId();
+        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
+        final SharedPreferences.Editor editor = prefs.edit();
         switch(item.getItemId()){
             case R.id.menu_item1 :
                 penSettings();
+                editor.putBoolean("penDown", pen);
+                editor.apply();
                 return true;
             case R.id.menu_item2 :
                 colorSettings();
@@ -219,20 +248,29 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     public void colorSettings() {
         //Allows the user to change the colors of their lines that they draw
+        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(getApplicationContext());
+        final SharedPreferences.Editor editor = prefs.edit();
         final ColorPicker colorPicker = new ColorPicker(MapsActivity.this);
         colorPicker.setFastChooser(new ColorPicker.OnFastChooseColorListener() {
             @Override
             public void setOnFastChooseColorListner(int position, int color) {
-                //code
-                selectedColor = String.format("#%06X", (0xFFFFFF & color));
-                line.color(color);
+                //Changes the entire draw to the currently selected color
+                selectColor = color;
+                selectedColor = String.format("#%06X", (0xFFFFFF & selectColor));
+                lineList = line.getPoints();
+                line.color(selectColor);
+                Polyline path = mMap.addPolyline(line);
+                path.setPoints(lineList);
                 Toast.makeText(getBaseContext(), selectedColor, Toast.LENGTH_LONG).show();
+                editor.putInt("color", selectColor);
+                editor.apply();
                 colorPicker.dismissDialog();
             }
         }).setColumns(5).show();
     }
 
     public void saveData() {
+        //Saves the image as a geojson file
         if (isExternalStorageWritable()) {
             try {
                 File file = new File(this.getExternalFilesDir(null), "drawing.geojson");
@@ -248,6 +286,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     public boolean isExternalStorageWritable() {
+        //Checks to see if it is possible to save the file
         String state = Environment.getExternalStorageState();
         if (Environment.MEDIA_MOUNTED.equals(state)) {
             return true;
@@ -256,20 +295,20 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     public void shareData() {
+        //Allows the user to share the file if they previously saved it
         Uri fileUri;
 
         File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
         File file = new File(dir, "drawing.geojson");
 
         fileUri = Uri.fromFile(file);
-        Log.v(TAG, "File is at: "+fileUri);
+        Log.v(TAG, "File is at: " + fileUri);
 
         Intent shareIntent = new Intent(Intent.ACTION_SEND);
         shareIntent.setType("text/plain");
         shareIntent.putExtra(Intent.EXTRA_STREAM, fileUri);
 
         Intent chooser = Intent.createChooser(shareIntent, "Share this file");
-        //could check the resolver
         startActivity(chooser);
     }
 }
